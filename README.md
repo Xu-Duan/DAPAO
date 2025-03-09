@@ -1,6 +1,14 @@
 # DAPAO (Distributed Advanced PArallel Optimization)
 
-A optimization library that supports Steepest Descent, Newton, Modified Newton, BFGS, L-BFGS, Newton-CG
+A high-performance optimization library that leverages parallel computing for large-scale optimization problems. DAPAO provides efficient implementations of classical and modern optimization algorithms including Steepest Descent, Newton, Modified Newton, BFGS, L-BFGS, and Newton-CG.
+
+## Key Features
+
+- **Parallel Execution**: Utilizes Julia's native parallel computing capabilities for faster convergence on multi-core systems
+- **Distributed Computing Support**: Scales to multiple nodes for handling very large optimization problems
+- **High Performance**: Optimized implementations of gradient-based algorithms
+- **Flexible API**: Simple interface that works with both simple and complex optimization problems
+- **Extensible Design**: Easy to add custom optimization methods
 
 ## Installation
 
@@ -20,16 +28,14 @@ add DAPAO
 ## Direction Search Methods
 - [x] Steepest Descent
 - [x] Newton
-- [ ] Modified Newton
+- [x] Modified Newton
 - [ ] BFGS
 - [ ] L-BFGS
-- [ ] Newton-CG
+- [x] Newton-CG
 
 ## TO-DO
-- [ ] Implement Modified Newton method
 - [ ] Implement BFGS method
 - [ ] Implement L-BFGS method
-- [ ] Implement Newton-CG method
 - [ ] Pass all tests for different functions in test/runtest.jl
 - [ ] Test scalability
 

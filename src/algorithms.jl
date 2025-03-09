@@ -42,10 +42,9 @@ function compute_direction(alg::BFGS, x, g, p)
     return -g  # BFGS: direction uses inverse Hessian approximation
 end
 
-function compute_direction(alg::LBFGS, x, g, H, f, grad, p)
-    # For L-BFGS, H is actually a tuple of (s_history, y_history)
-    #s_history, y_history = H
-    #return compute_lbfgs_direction(g, s_history, y_history, alg.m)
+function compute_direction(alg::LBFGS, x, g, p)
+    # For L-BFGS, we would normally use a history of positions and gradients
+    # For simplicity, we'll just return the negative gradient for now
     return -g
 end
 
@@ -55,54 +54,91 @@ function compute_direction(alg::Newton, x, g, f, grad, H, p)
     return -H(x, p) \ g  # Backslash operator solves H * pk = -g
 end
 
-function compute_direction(alg::ModifiedNewton, x, g, H, f, grad!, p)
+function compute_direction(alg::ModifiedNewton, x, g, f, grad, H, p)
     # Modified Newton's method: Ensure H is positive definite
     # by modifying eigenvalues if necessary
     
-    # Compute eigendecomposition
-    F = eigen(Symmetric(H))
-    vals, vecs = F.values, F.vectors
-    
-    # Modify eigenvalues to ensure positive definiteness
-    modified_vals = max.(vals, alg.min_eig)
-    
-    # Reconstruct modified Hessian
-    H_modified = vecs * Diagonal(modified_vals) * vecs'
-    
-    # Solve the system with modified Hessian
-    return -H_modified \ g
-end
+    # Compute Hessian
+    hessk = H(x, p)
+    beta = alg.min_eig
 
-function compute_direction(alg::NewtonCG, x, g, H, f, grad!, p)
-    # Newton-CG method: Use conjugate gradient to solve H * pk = -g
-    
-    # Implementation of conjugate gradient method
-    function cg_solve(A, b, tol, max_iter)
-        x = zeros(length(b))
-        r = b - A * x
-        p = copy(r)
-        rsold = dot(r, r)
-        
-        for i in 1:max_iter
-            Ap = A * p
-            alpha = rsold / dot(p, Ap)
-            x = x + alpha * p
-            r = r - alpha * Ap
-            rsnew = dot(r, r)
-            
-            if sqrt(rsnew) < tol
-                break
-            end
-            
-            p = r + (rsnew / rsold) * p
-            rsold = rsnew
-        end
-        
-        return x
+    if minimum(diag(hessk)) > 0
+        delta = 0
+    else
+        delta = -minimum(diag(hessk)) + beta
     end
     
-    # Solve the Newton system using CG
-    return cg_solve(H, -g, alg.tol, alg.max_cg_iter)
+    # Try Cholesky factorization, if it fails, modify the Hessian
+    local C
+    while true
+        try
+            # Try Cholesky factorization
+            C = cholesky(hessk + delta * I, check=false)
+            break  # Exit the loop if successful
+        catch
+            # Subsequent failures: double delta
+            delta = max(2 * delta, beta)
+        end
+    end
+
+    # Solve the system using Cholesky factorization
+    pk = C \ (-g)     # Solve using the Cholesky factorization
+    return pk
+end
+
+function compute_direction(alg::NewtonCG, x, g, f, grad, H, p)
+    # Newton-CG method: Use conjugate gradient to solve H * pk = -g
+    
+    # Get Hessian at current point
+    hessk = H(x, p)
+    
+    # Extract parameters from alg (assuming NewtonCG is a struct)
+    cg_tol = alg.tol  # CG tolerance
+    max_iter = alg.max_cg_iter
+    
+    # Initialize CG variables
+    z = zeros(eltype(x), length(x))  # Match type of x (e.g., Float64)
+    r = copy(g)                      # Initial residual = gradient
+    d = -r                           # Initial CG direction
+    
+    # Conjugate Gradient iterations
+    for j in 0:max_iter
+        # Compute Hessian-vector product
+        Hd = hessk * d
+        
+        # Check for negative curvature
+        dHd = dot(d, Hd)  # d' * Hd in Julia
+        if dHd <= 0
+            # If negative curvature on first iteration, use steepest descent
+            return (j == 0) ? -g : z
+        end
+        
+        # Compute step size
+        rr = dot(r, r)    # r' * r
+        alpha = rr / dHd
+        
+        # Update solution and residual
+        z .+= alpha .* d     # In-place update
+        r_new = r + alpha * Hd
+        
+        # Check for convergence based on norm of residual
+        if norm(r_new) < cg_tol * norm(g)
+            return z
+        end
+        
+        # Compute beta using Polak-Ribiere formula
+        r_new_r_new = dot(r_new, r_new)
+        beta = r_new_r_new / rr
+        
+        # Update direction
+        d = -r_new + beta * d
+        
+        # Update residual
+        r = r_new
+    end
+    
+    # If max iterations reached without convergence, return current solution
+    return z
 end
 
 """
@@ -149,7 +185,6 @@ function wolfe_line_search(xk, pk, f, grad, p, c1 = 1e-4, c2 = 0.9, alpha_init =
     # Get current values
     fk = f(xk, p)
     gradk = grad(xk, p)
-    
     # Store initial gradient dot product for second Wolfe condition
     initial_grad_dot_pk = gradk' * pk
     

@@ -36,7 +36,7 @@ using LinearAlgebra, Printf
     prob = OptimizationProblem(optprob, x0)
     
     @testset "Steepest Descent" begin
-        sol = solve(prob, SteepestDescent(), maxiters=10000)
+        sol = solve(prob, SteepestDescent(), f_tol=1e-12, maxiters=10000)
         @test sol.converged
         @test isapprox(sol.x, [1.0, 1.0], atol=0.001)
         @test isapprox(sol.f_val, 0.0, atol=0.001)
@@ -74,14 +74,7 @@ using LinearAlgebra, Printf
     optprob = OptimizationFunction(rosenbrockfunc, rosenbrockgrad, rosenbrockhess)
     x0 = [-1.2, 1.0]
     prob = OptimizationProblem(optprob, x0)
-    @testset "Standard Newton" begin
-        sol = solve(prob, Newton(), g_tol=1e-6, maxiters=100)
-        @test sol.converged
-        @test isapprox(sol.x, [1.0, 1.0], atol=1e-3)
-        @test isapprox(sol.f_val, 0.0, atol=1e-3)
-    end
-
-    """
+    
     # Test Newton variants
     @testset "Newton-based Algorithms" begin
         # Standard Newton
@@ -108,7 +101,6 @@ using LinearAlgebra, Printf
         end
         
     end
-    """
 
     println("All tests completed")
 end
